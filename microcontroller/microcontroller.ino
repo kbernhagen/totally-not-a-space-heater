@@ -3,6 +3,7 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 #include <DHT.h>
+#include <Preferences.h>
 
 #define DHTPIN 4
 #define DHTTYPE 22
@@ -18,11 +19,15 @@ hw_timer_t *every2s = NULL;
 int every2svar = 0;
 int state = 0;
 
+int saveinterval = 0;
+
 float settemp = 25;
 int lastinteraction = -10000;
 int firstsatisfy = 0;
 
 float roomtemp = 0;
+
+Preferences savedsettings;
 
 void IRAM_ATTR every2sSignal(){
     every2svar = 1;
@@ -53,52 +58,71 @@ void setup() {
 
     bluebutton.setTapHandler(bluebuttonpressed);
     redbutton.setTapHandler(redbuttonpressed);
+
+    savedsettings.begin("heater", true);
+    settemp = savedsettings.getFloat("settemp", 25.0);
+    savedsettings.end();
+
 }
 
 void loop() {
     // put your main code here, to run repeatedly:
     bluebutton.loop();
     redbutton.loop();
-    // if (bluebutton.wasPressed()){
-    //   settemp -= 0.5;
-    //   lastinteraction = millis();
-    //   Serial.print(settemp);
-    // }
-    // if (redbutton.wasPressed()){
-    //   settemp += 0.5;
-    //   lastinteraction = millis();
-    //   Serial.print(settemp);
-    // }
-    if (every2svar) {
-        roomtemp = tempsense.readTemperature();
-        if (millis() - lastinteraction >= 10000){
-          lcd.setCursor(3,0);
-          if(roomtemp >= 0) {
-              lcd.print(roomtemp,1);
-          }
-          else {
-              lcd.print(" <0 ");
-          }
-        }
+    normaloperations();
+}
 
-        if (roomtemp - settemp >= 0.5){
-            state = 0;
-        }
-        else if (settemp - roomtemp >= 0.5) {
-            state = 1;
-        }
-        
-        lcd.setCursor(9,0);
-        if(state == 0){
-            lcd.print("Idle   ");
+void bluebuttonpressed(Button2& btn){
+    settemp -= 0.5;
+    lastinteraction = millis();
+}
+
+void redbuttonpressed(Button2& btn){
+    settemp += 0.5;
+    lastinteraction = millis();
+}
+
+void normaloperations() {
+    if (every2svar) {
+    roomtemp = tempsense.readTemperature();
+    if (millis() - lastinteraction >= 10000){
+        lcd.setCursor(3,0);
+        if(roomtemp >= 0) {
+            lcd.print(roomtemp,1);
         }
         else {
-            lcd.print("Heating");
+            lcd.print(" <0 ");
         }
-
-        Serial.println(state);
-        every2svar = 0;
     }
+
+    if (saveinterval >= 60) {
+        savedsettings.begin("heater",false);
+        savedsettings.putFloat("settemp" , settemp );
+        savedsettings.end();
+        saveinterval = 0;
+        }
+    else {
+        saveinterval += 1;
+    }
+
+    if (roomtemp - settemp >= 0.5){
+        state = 0;
+    }
+    else if (settemp - roomtemp >= 0.5) {
+        state = 1;
+    }
+    
+    lcd.setCursor(9,0);
+    if(state == 0){
+        lcd.print("Idle   ");
+    }
+    else {
+        lcd.print("Heating");
+    }
+
+    Serial.println(state);
+    every2svar = 0;
+}
 
     if(millis() - lastinteraction >= 7000){
         lcd.setCursor(0,0);
@@ -115,15 +139,4 @@ void loop() {
     if(millis() - lastinteraction >= 20000){
         lcd.noBacklight();
     }
-
-}
-
-void bluebuttonpressed(Button2& btn){
-    settemp -= 0.5;
-    lastinteraction = millis();
-}
-
-void redbuttonpressed(Button2& btn){
-    settemp += 0.5;
-    lastinteraction = millis();
 }
